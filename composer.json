@@ -1,0 +1,37 @@
+{
+    "name": "efabrica/elastic-apm-nette-extension",
+    "description": "Nette extension for Elastic APM",
+    "license": "MIT",
+    "keywords": ["nette", "elastic apm", "extension"],
+    "authors": [
+        {
+            "name": "Samuel Kelemen",
+            "email": "kelemen.samuel@gmail.com"
+        }
+    ],
+    "require": {
+        "php": ">= 7.1",
+        "philkra/elastic-apm-php-agent": "^6.5",
+        "nette/di": "^3.0",
+        "nette/application": "^3.0"
+    },
+    "require-dev": {
+        "nette/database": "^3.0",
+        "phpstan/phpstan-nette": "0.11",
+        "squizlabs/php_codesniffer": "^2.6"
+    },
+    "autoload": {
+        "classmap": ["src/"]
+    },
+    "suggest": {
+        "nette/database": "If you want use NetteDatabaseQuerySpanGenerator"
+    },
+    "scripts": {
+        "phpstan": "vendor/bin/phpstan analyze src -c phpstan.neon --level=max --no-progress",
+        "phpcs": "vendor/bin/phpcs src --standard=PSR2",
+        "test": [
+            "@phpcs",
+            "@phpstan"
+        ]
+    }
+}
