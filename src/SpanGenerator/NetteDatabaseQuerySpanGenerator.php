@@ -6,7 +6,7 @@ namespace Efabrica\NetteElasticAmp\SpanGenerator;
 
 use Efabrica\NetteElasticAmp\Helper\Stacktrace;
 use Nette\DI\ContainerBuilder;
-use Nette\DI\Definitions\ServiceDefinition;
+use Nette\DI\ServiceDefinition;
 use Nette\Utils\Strings;
 use Nette\Database\Connection;
 

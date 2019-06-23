@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Efabrica\NetteElasticAmp\SpanGenerator;
 
 use Nette\DI\ContainerBuilder;
-use Nette\DI\Definitions\ServiceDefinition;
+use Nette\DI\ServiceDefinition;
 
 interface ISpanGenerator
 {
