@@ -9,8 +9,9 @@ use Nette\Utils\Strings;
 use PhilKra\Agent;
 use PhilKra\Events\Transaction;
 use PhilKra\Exception\Transaction\DuplicateTransactionNameException;
-use PhilKra\Exception\Transaction\UnknownTransactionException;
 use Nette;
+use Exception;
+use Tracy\Debugger;
 
 class ApmTransaction
 {
@@ -32,8 +33,8 @@ class ApmTransaction
     /** @var array */
     private $spans = [];
 
-    /** @var string */
-    private $transactionName = "unknown";
+    /** @var string|null */
+    private $transactionName;
 
     /** @var array|null */
     private $currentAppSpan;
@@ -41,8 +42,14 @@ class ApmTransaction
     /** @var array|null */
     private $currentRequestSpan;
 
-    public function __construct(array $config, Nette\Http\Request $httpRequest, Nette\Http\Response $httpResponse)
-    {
+    /** @var int */
+    private $lastResponseTime = 0;
+
+    public function __construct(
+        array $config,
+        Nette\Http\Request $httpRequest,
+        Nette\Http\Response $httpResponse
+    ) {
         $this->agent = new Agent($config);
         $this->httpRequest = $httpRequest;
         $this->httpResponse = $httpResponse;
@@ -56,8 +63,19 @@ class ApmTransaction
         try {
             $this->agent->startTransaction($this->transactionName, [], $this->start);
         } catch (DuplicateTransactionNameException $e) {
-            // @silently ignore: maybe use psr/log?
+            Debugger::log($e, Debugger::EXCEPTION);
+            return;
         }
+
+        $currentTimeFromStart = (microtime(true) - $this->start) * 1000;
+
+        $this->spans[] = [
+            'name' => 'Application boot',
+            'type' => 'app',
+            'stacktrace' => [],
+            'start' => 0,
+            'duration' => $currentTimeFromStart
+        ];
 
         $this->currentAppSpan = [
             'startTimestamp' => microtime(true),
@@ -65,38 +83,59 @@ class ApmTransaction
                 'name' => 'Application::run',
                 'type' => 'app',
                 'stacktrace' => [],
-                'start' => (microtime(true) - $this->start) * 1000,
+                'start' => $currentTimeFromStart,
             ]
         ];
     }
 
     public function stop(): void
     {
+        // Error protection
+        if ($this->currentAppSpan === null) {
+            return;
+        }
+
         $this->spans[] = array_merge($this->currentAppSpan['span'], [
             'duration' => (microtime(true) - $this->currentAppSpan['startTimestamp']) * 1000
         ]);
-        $this->currentAppSpan = null;
+
+        $this->spans[] = [
+            'name' => 'Send/render response',
+            'type' => 'app',
+            'stacktrace' => [],
+            'start' => ($this->lastResponseTime - $this->start) * 1000,
+            'duration' => (microtime(true) - $this->lastResponseTime) * 1000
+        ];
 
         try {
-            $this->agent->stopTransaction($this->transactionName);
+            $this->agent->stopTransaction($this->transactionName, [
+                'result' => $this->httpResponse ? $this->httpResponse->getCode() : 200
+            ]);
 
             /** @var Transaction $transaction */
             $transaction = $this->agent->getTransaction($this->transactionName);
             $transaction->setSpans($this->spans);
-        } catch (UnknownTransactionException $e) {
-            // @silently ignore: maybe use psr/log?
-            return;
+            $this->agent->send();
+        } catch (Exception $e) {
+            Debugger::log($e, Debugger::EXCEPTION);
         }
 
-        $this->agent->send();
+        $this->currentAppSpan = null;
     }
 
     public function request(Nette\Application\Request $request): void
     {
+        if ($this->currentRequestSpan) {
+            $this->spans[] = array_merge($this->currentRequestSpan['span'], [
+                'duration' => (microtime(true) - $this->currentRequestSpan['startTimestamp']) * 1000
+            ]);
+            $this->currentRequestSpan = null;
+        }
+
         $this->currentRequestSpan = [
             'startTimestamp' => microtime(true),
             'span' => [
-                'name' => sprintf("Request [%s] %s:", $request->getMethod(),$request->getPresenterName()),
+                'name' => sprintf("Request [%s] ~ Processing: %s:", $request->getMethod(),$request->getPresenterName()),
                 'type' => 'app',
                 'stacktrace' => [],
                 'start' => (microtime(true) - $this->start) * 1000,
@@ -111,6 +150,7 @@ class ApmTransaction
             'duration' => (microtime(true) - $this->currentRequestSpan['startTimestamp']) * 1000
         ]);
         $this->currentRequestSpan = null;
+        $this->lastResponseTime = microtime(true);
     }
 
     public function registerSpanGenerator(ISpanGenerator $spanGenerator): self
