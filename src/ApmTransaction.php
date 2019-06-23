@@ -85,7 +85,7 @@ class ApmTransaction
         ];
     }
 
-    public function stop(Nette\Application\Application $app): void
+    public function stop(): void
     {
         // Error protection
         if ($this->currentAppSpan === null) {
